@@ -1,3 +1,6 @@
+; This program displays heart on screen, and waits for user to press any key
+;----------------File Contents Start After This Line----------------
+
 .model tiny
 .code
 org 100h
