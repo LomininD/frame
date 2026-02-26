@@ -2,7 +2,7 @@
 ; video memory. Frame is centered in the middle of screen, text is defined as
 ; command line argument.
 ;
-; TODO: define frame style, multiple lines
+; TODO: multiple lines
 ;
 ; by LMD
 ;----------------------File Contents Start After This Line----------------------
@@ -16,16 +16,17 @@ locals @@
 color_attr = 70h			; black text on white bg
 frame_sym  = 2ah			; symbol of a frame
 max_width  = 76				; max text width
-style_arg_len = 6			; bytes in frame style info 
+style_arg_len = 6			; bytes in frame style info
 arg_len_pos = 80h			; location of arg len in cs
-arg_text_start = 82h			; location of  arg text in cs
+arg_text_start = 82h			; location of arg text in cs
+					; first space skipped
 
 
 LoadES		macro
 		mov ax, 0b800h
 		mov es, ax
 		endm
-	
+
 NewL		macro
 		add FrameOffset, 160
 		mov di, FrameOffset
@@ -37,7 +38,7 @@ Start:
 		call ClearScreen
 
 		call GetArgLen
-		cmp ax, style_arg_len + 3
+		cmp ax, style_arg_len + 3	; 1 + 6 + 1 + 1 char of text
 		jb EndProg
 		dec ax			; remove first space
 
@@ -48,13 +49,12 @@ Start:
 		call ParseFrameStyle
 
 		call GetTextWidth
-		mov TextWidth, ax	
-		mov TotalSymbols, bx 
+		mov TextWidth, ax
 		mov TotalLines, cx
 
 		call CalcFrameOffset
 		mov FrameOffset, ax
-		
+
 		call DrawFrame
 
 EndProg:
@@ -69,11 +69,11 @@ TextWidth	dw 0			; number of symbols in text
 TotalSymbols	dw 0			; number of symbols in text
 TotalLines	dw 0			; number of lines in the text
 CurPos		dw 0			; cur pos in cs
-FrameStyle	db 6 dup (0)		; frame style arr 
+FrameStyle	db 6 dup (0)		; frame style arr
 
 ;===============================================================================
 ; ClearScreen
-; 
+;
 ; Dumps empty chars in video memory page
 ; Entry:     ES -> video mem segment
 ; Exit:      -
@@ -90,7 +90,7 @@ ClearScreen	proc
 		xor di, di		; of video memory
 		mov ax, 0		; blank symbol on black bg
 		mov cx, 80 * 25		; symbols in video page
-		rep stosw 
+		rep stosw
 
 		pop di			; restores used registers values
 		pop cx
@@ -118,7 +118,7 @@ GetArgLen 	proc
 		mov al, bl
 
 		ret
-		endp 
+		endp
 
 ;===============================================================================
 ; ParseFrameStyle
@@ -129,12 +129,12 @@ GetArgLen 	proc
 ; 2: top left corner
 ; 3: top right corner
 ; 4: bottom left corner
-; 5: bottom right corner 
+; 5: bottom right corner
 ; Entry:     CS -> code segment
-;	     BX -> style arr address 
+;	     BX -> style arr address
 ; Exit:      -
 ; Expected:  -
-; Destroyed: AX, BX, CX, SI, 
+; Destroyed: AX, BX, CX, SI,
 ;-------------------------------------------------------------------------------
 
 ParseFrameStyle	proc
@@ -151,7 +151,7 @@ ParseFrameStyle	proc
 
 		mov si, CurPos
 
-@@NextArg:				; load style arg in array 
+@@NextArg:				; load style arg in array
 		lodsb
 		mov byte ptr es:[bx], al
 		inc bx
@@ -162,8 +162,8 @@ ParseFrameStyle	proc
 
 		mov bx, TotalSymbols
 		sub bx, style_arg_len
-		;dec bx
-		mov TotalSymbols, bx	; TotalSymbols -= style_arg_len
+		dec bx
+		mov TotalSymbols, bx	; TotalSymbols -= style_arg_len + 1
 
 		mov bx, CurPos
 		add bx, style_arg_len + 1
@@ -173,45 +173,32 @@ ParseFrameStyle	proc
 		endp
 
 ;===============================================================================
-; GetTextWidth (UPDATE)
+; GetTextWidth !!!
 ;
-; Reads number of symbols in text from cs:80h, calculates width and line amount 
+; Reads number of symbols in text from cs:80h, calculates width and line amount
 ; Entry:     CS -> code segment
 ; Exit:      AX <- text width
-;	     BX <- number of symbols
 ;	     CX <- number of lines
 ; Expected:  -
-; Destroyed: AX, BX, CX
+; Destroyed: AX, CX
 ;-------------------------------------------------------------------------------
 
 GetTextWidth	proc
 
-		mov bx, TotalSymbols
-
-		cmp bx, 0		; if no text given
-		jnz @@ParseLines
-
-@@NoData:	xor ax, ax
-		xor bx, bx
-		xor cx, cx
-		ret
-
-@@ParseLines:
-		dec bx			; skip leading space
-		mov ax, bx
+		mov ax, TotalSymbols
 		mov cx, max_width	; assumed that max_width < 128
 		div cl
 		mov cl, al 		; cx = num of sym div max_width
 
-		cmp ah, 0	
-		jz @@Rounded		
+		cmp ah, 0
+		jz @@Rounded
 		add cx, 1		; if ah != 0 cx += 1
 
 @@Rounded:
 		cmp al, 0
 		jnz @@Allign
 		mov al, ah
-		xor ah, ah 
+		xor ah, ah
 		jmp @@Ret
 
 @@Allign:	mov ax, max_width
@@ -220,7 +207,7 @@ GetTextWidth	proc
 		endp
 
 ;===============================================================================
-; CalcFrameOffset (UPDATE)
+; CalcFrameOffset !!!
 ;
 ; Calculates line offset for frame beginning and puts value in ax
 ; Entry:     -
@@ -237,10 +224,10 @@ CalcFrameOffset	proc
 		mov dx, TotalLines
 		shr dx, 1		; dx = dx div 2
 		neg dx
-		add dx, 11		; dx = 12 - dx
+		add dx, 11		; dx = 11 - dx
 		mov ax, dx
 		mov dx, 160		; dx - bytes in line
-		mul dx			; whole value should be stored in ax		
+		mul dx			; whole value should be stored in ax
 		add ax, 40 * 2		; 80 - mid offset (40 words)
 		sub ax, bx
 		sub ax, 2 * 2		; -2 words for boarder and space
@@ -251,7 +238,7 @@ CalcFrameOffset	proc
 ;===============================================================================
 ; DrawFrame
 ;
-; Draws in video memory frame with given text 
+; Draws in video memory frame with given text
 ; Entry:     ES -> video mem segment
 ;	     CS -> code segment
 ; Exit:      -
@@ -261,9 +248,8 @@ CalcFrameOffset	proc
 
 DrawFrame	proc
 
-		mov bx, 2
+		mov bx, 0		; bx = 0 for top border 
 		call DrawHBorder
-		;call DrawEmptyLine
 
 		mov ah, color_attr
 		mov cx, TotalLines
@@ -286,7 +272,7 @@ DrawFrame	proc
 
 		mov cx, max_width
 
-@@CallFunc:	call DisplayStr		
+@@CallFunc:	call DisplayStr
 		pop cx
 
 		mov al, 00h
@@ -297,8 +283,7 @@ DrawFrame	proc
 
 		loop @@Center
 
-		; call DrawEmptyLine
-		mov bx, 4
+		mov bx, 1		; bx = 1 for bottom border 
 		call DrawHBorder
 
 		ret
@@ -307,30 +292,33 @@ DrawFrame	proc
 ;===============================================================================
 ; DrawHBorder
 ;
-; Draws horizontal top border in video mem
+; Draws horizontal border in video mem
 ; Entry:     ES -> video mem segment
 ;	     CS -> code segment
-;	     BX -> 2 - top border, 4 - bottom border
+;	     BX -> 0 - top border, 1 - bottom border
 ; Exit:      -
 ; Expected:  -
 ; Destroyed: AX, BX, CX, DI
 ;-------------------------------------------------------------------------------
 
 DrawHBorder	proc
-		
+
+		shl bx, 1		; modificates bx=0 -> bx=2  
+		add bx, 2		; 	      bx=1 -> bx=4
+
 		mov ah, color_attr
 
 		mov di, FrameOffset
 		mov al, [FrameStyle + bx]
 		stosw
 
-		mov cx, TextWidth 
+		mov cx, TextWidth
 		add cx, 2
 		mov al, [FrameStyle]
 
 		rep stosw		; draws mid part of upper hor border
 
-		mov al, [FrameStyle + bx + 1]	
+		mov al, [FrameStyle + bx + 1]
 		stosw
 
 		NewL
@@ -369,10 +357,10 @@ DrawEmptyLine	proc
 ;===============================================================================
 ; DisplayStr
 ;
-; Displays command line argument in video mem 
+; Displays command line argument in video mem
 ; Entry:     ES -> video mem segment
 ;	     CS -> code segment
-;	     DI -> line offset for text 
+;	     DI -> line offset for text
 ;	     CX -> number of symbols
 ;	     SI -> text beginning in cs
 ; Exit:      -
@@ -392,7 +380,7 @@ DisplayStr	proc
 		jae @@MoveStr
 		mov dx, TextWidth
 		sub dx, cx
-		
+
 		mov ah, color_attr
 
 @@MoveStr:
@@ -405,7 +393,7 @@ DisplayStr	proc
 		cmp dx, 0
 		jz @@EndFunc
 		mov cx, dx
-		
+
 		call FillWithSpaces
 
 @@EndFunc:	ret
@@ -414,7 +402,7 @@ DisplayStr	proc
 ;===============================================================================
 ; FillWithSpaces
 ;
-; Adds spaces after ES:DI CX times 
+; Adds spaces after ES:DI CX times
 ; Entry:     ES -> video mem segment
 ;	     CX -> number of spaces to fill
 ;	     DI -> start position for filling
@@ -426,7 +414,7 @@ DisplayStr	proc
 FillWithSpaces	proc
 
 		mov ah, color_attr
-		xor al, al		; al - blank symbol 
+		xor al, al		; al - blank symbol
 
 @@FillSpaces:
 		stosw
