@@ -44,6 +44,7 @@ Start:
 		mov TotalSymbols, ax
 		mov CurPos, arg_text_start
 
+		lea bx, [FrameStyle]
 		call ParseFrameStyle
 
 		call GetTextWidth
@@ -71,7 +72,7 @@ TextWidth	dw 0			; number of symbols in text
 TotalSymbols	dw 0			; number of symbols in text
 TotalLines	dw 0			; number of lines in the text
 CurPos		dw 0			; cur pos in cs
-
+FrameStyle	db 6 dup (0)		; frame style arr 
 ;===============================================================================
 ; ClearScreen
 ; 
@@ -132,15 +133,34 @@ GetArgLen 	proc
 ; 4: bottom right corner
 ; 5: bottom left corner 
 ; Entry:     CS -> code segment
-;	     AX -> style arr address 
+;	     BX -> style arr address 
 ; Exit:      -
 ; Expected:  -
-; Destroyed: BX
+; Destroyed: AX, BX, CX, SI, 
 ;-------------------------------------------------------------------------------
 
 ParseFrameStyle	proc
 
+		mov cx, style_arg_len
 
+		push ds			; save ds
+		push es			; save es
+
+		push ds
+		pop es			; es = ds
+		push cs
+		pop ds			; ds = cs
+
+		mov si, CurPos
+
+@@NextArg:				; load style arg in array 
+		lodsb
+		mov byte ptr es:[bx], al
+		inc bx
+		loop @@NextArg
+
+		pop es			; restore es
+		pop ds			; restore cs
 
 		mov bx, TotalSymbols
 		sub bx, style_arg_len
