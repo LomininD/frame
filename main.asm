@@ -16,7 +16,7 @@ locals @@
 color_attr = 70h			; black text on white bg
 frame_sym  = 2ah			; symbol of a frame
 max_width  = 76				; max text width
-style_arg_len = 6			; bytes in frame style info
+style_arg_len = 17			; bytes in frame style info
 arg_len_pos = 80h			; location of arg len in cs
 arg_text_start = 82h			; location of arg text in cs
 					; first space skipped
@@ -134,7 +134,7 @@ GetArgLen 	proc
 ;	     BX -> style arr address
 ; Exit:      -
 ; Expected:  -
-; Destroyed: AX, BX, CX, SI,
+; Destroyed: AX, BX, CX, SI, DL
 ;-------------------------------------------------------------------------------
 
 ParseFrameStyle	proc
@@ -152,9 +152,19 @@ ParseFrameStyle	proc
 		mov si, CurPos
 
 @@NextArg:				; load style arg in array
-		lodsb
+		lodsw
+
+		call AtoI		; converts to hex number
+		mov dl, al
+		shl dl, 4
+		mov al, ah
+		call AtoI
+		add dl, al
+		mov al, dl
+
 		mov byte ptr es:[bx], al
 		inc bx
+		inc si
 		loop @@NextArg
 
 		pop es			; restore es
@@ -170,6 +180,33 @@ ParseFrameStyle	proc
 		mov CurPos, bx		; CurPos += style_arg_len + 1
 
 		ret
+		endp
+
+;===============================================================================
+; AtoI
+;
+; Converts byte string A to hex number A 
+; Entry:     AL -> number as string 
+; Exit:      AL <- number as hex 
+; Expected:  -
+; Destroyed: -
+;-------------------------------------------------------------------------------
+
+AtoI		proc
+
+		cmp al, 'a'
+		jb @@ConvertDigital
+		jmp @@ConvertAlpha
+
+@@ConvertDigital:
+		sub al, '0'
+		jmp @@Ret
+
+@@ConvertAlpha:
+		sub al, 'a'
+		add al, 0ah
+
+@@Ret:		ret
 		endp
 
 ;===============================================================================
