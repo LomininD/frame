@@ -16,6 +16,7 @@ locals @@
 color_attr = 70h			; black text on white bg
 frame_sym  = 2ah			; symbol of a frame
 max_width  = 76				; max text width
+max_symbols = 100			; max symbol amount
 
 
 LoadES		macro
@@ -111,11 +112,16 @@ GetTextWidth	proc
 		mov bl, cs:[bx]		; bx = number of symbols
 
 		cmp bx, 0		; if no text given
-		jnz @@ParseLines
+		jnz @@CheckOverflow
 		xor ax, ax
 		xor bx, bx
 		xor cx, cx
 		ret
+
+@@CheckOverflow:
+		cmp bx, max_symbols
+		jb @@ParseLines
+		mov bx, max_symbols
 
 @@ParseLines:
 		dec bx			; skip leading space
@@ -187,6 +193,7 @@ DrawFrame	proc
 
 		mov ah, color_attr
 		mov cx, TotalLines
+		mov si, 82h		; si = string beginning after space
 
 @@Center:
 		mov al, frame_sym
@@ -195,13 +202,13 @@ DrawFrame	proc
 		stosw			; draws blank space
 
 		push cx
-		mov cx, TextWidth
+		mov cx, TotalSymbols
 		cmp cx, max_width	; if cx <= max_width
 		jbe @@CallFunc
 
-		mov bx, TextWidth
+		mov bx, TotalSymbols
 		sub bx, max_width
-		mov TextWidth, bx	; TextWidth -= max_width
+		mov TotalSymbols, bx	; TotalSymbols -= max_width
 
 		mov cx, max_width
 
@@ -284,30 +291,45 @@ DrawEmptyLine	proc
 ;	     CS -> code segment
 ;	     DI -> line offset for text 
 ;	     CX -> number of symbols
+;	     SI -> text beginning in cs
 ; Exit:      -
 ; Expected:  -
-; Destroyed: AX, CX, DI, SI
+; Destroyed: AX, CX, DI, SI, DX
 ;-------------------------------------------------------------------------------
 
 DisplayStr	proc
+
+		xor dx, dx
 
 		push ds			; saves DS
 		push cs
 		pop ds			; ds = cs
 
-		mov si, 82h		; si = string beginning after space
-		;mov cx, TextWidth
+		cmp cx, TextWidth	; check if extra spaces required
+		jae @@MoveStr
+		mov dx, TextWidth
+		sub dx, cx
+		
+		mov ah, color_attr
 
 @@MoveStr:
 		lodsb			; puts char in al
-		mov ah, color_attr
 		stosw			; puts char in video mem
 		loop @@MoveStr
 
 		pop ds
-		ret
-		endp
 
+		cmp dx, 0
+		jz @@EndFunc
+		mov cx, dx
+		xor al, al		; al - blank symbol
+
+@@FillSpaces:
+		stosw
+		loop @@FillSpaces
+
+@@EndFunc:	ret
+		endp
 
 
 end 		Start
