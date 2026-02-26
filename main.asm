@@ -2,7 +2,7 @@
 ; video memory. Frame is centered in the middle of screen, text is defined as
 ; command line argument.
 ;
-; TODO: define frame style, multiple lines, if line is too long split it
+; TODO: define frame style, multiple lines
 ;
 ; by LMD
 ;----------------------File Contents Start After This Line----------------------
@@ -16,7 +16,9 @@ locals @@
 color_attr = 70h			; black text on white bg
 frame_sym  = 2ah			; symbol of a frame
 max_width  = 76				; max text width
-max_symbols = 100			; max symbol amount
+style_arg_len = 6			; bytes in frame style info 
+arg_len_pos = 80h			; location of arg len in cs
+arg_text_start = 82h			; location of  arg text in cs
 
 
 LoadES		macro
@@ -34,22 +36,26 @@ Start:
 		LoadES
 		call ClearScreen
 
+		call GetArgLen
+		cmp ax, style_arg_len + 3
+		jb EndProg
+		dec ax			; remove first space
+
+		mov TotalSymbols, ax
+		mov CurPos, arg_text_start
+
+		call ParseFrameStyle
+
 		call GetTextWidth
 		mov TextWidth, ax	
 		mov TotalSymbols, bx 
 		mov TotalLines, cx
 
-		cmp bx, 0
-		jz EndProg
 
 		call CalcFrameOffset
 		mov FrameOffset, ax
 		
 		call DrawFrame
-
-
-
-
 
 
 
@@ -64,6 +70,8 @@ FrameOffset	dw 0			; frame beginning pos
 TextWidth	dw 0			; number of symbols in text
 TotalSymbols	dw 0			; number of symbols in text
 TotalLines	dw 0			; number of lines in the text
+CurPos		dw 0			; cur pos in cs
+
 ;===============================================================================
 ; ClearScreen
 ; 
@@ -93,7 +101,61 @@ ClearScreen	proc
 		endp
 
 ;===============================================================================
-; GetTextWidth
+; GetArgLen
+;
+; Gets arg text len in cs
+; Entry:     CS -> code segment
+; Exit:      AX <- total symbols
+; Expected:  -
+; Destroyed: AX, BX
+;-------------------------------------------------------------------------------
+
+GetArgLen 	proc
+
+		xor ax, ax
+		xor bx, bx
+		mov bl, arg_len_pos	; len is located at 80h
+		mov bl, cs:[bx]		; bx = number of symbols
+		mov al, bl
+
+		ret
+		endp 
+
+;===============================================================================
+; ParseFrameStyle
+;
+; Gets frame style info (6 bytes)
+; 0: horizontal border
+; 1: vertical border
+; 2: top left corner
+; 3: top right corner
+; 4: bottom right corner
+; 5: bottom left corner 
+; Entry:     CS -> code segment
+;	     AX -> style arr address 
+; Exit:      -
+; Expected:  -
+; Destroyed: BX
+;-------------------------------------------------------------------------------
+
+ParseFrameStyle	proc
+
+
+
+		mov bx, TotalSymbols
+		sub bx, style_arg_len
+		dec bx
+		mov TotalSymbols, bx	; TotalSymbols -= style_arg_len + 1
+
+		mov bx, CurPos
+		add bx, style_arg_len + 1
+		mov CurPos, bx		; CurPos += style_arg_len + 1
+
+		ret
+		endp
+
+;===============================================================================
+; GetTextWidth (UPDATE)
 ;
 ; Reads number of symbols in text from cs:80h, calculates width and line amount 
 ; Entry:     CS -> code segment
@@ -106,22 +168,15 @@ ClearScreen	proc
 
 GetTextWidth	proc
 
-		xor ax, ax
-		xor bx, bx
-		mov bl, 80h		; len is located at 80h
-		mov bl, cs:[bx]		; bx = number of symbols
+		mov bx, TotalSymbols
 
 		cmp bx, 0		; if no text given
-		jnz @@CheckOverflow
-		xor ax, ax
+		jnz @@ParseLines
+
+@@NoData:	xor ax, ax
 		xor bx, bx
 		xor cx, cx
 		ret
-
-@@CheckOverflow:
-		cmp bx, max_symbols
-		jb @@ParseLines
-		mov bx, max_symbols
 
 @@ParseLines:
 		dec bx			; skip leading space
@@ -147,7 +202,7 @@ GetTextWidth	proc
 		endp
 
 ;===============================================================================
-; CalcFrameOffset
+; CalcFrameOffset (UPDATE)
 ;
 ; Calculates line offset for frame beginning and puts value in ax
 ; Entry:     -
@@ -193,7 +248,7 @@ DrawFrame	proc
 
 		mov ah, color_attr
 		mov cx, TotalLines
-		mov si, 82h		; si = string beginning after space
+		mov si, CurPos		; si = string beginning after space
 
 @@Center:
 		mov al, frame_sym
@@ -322,14 +377,34 @@ DisplayStr	proc
 		cmp dx, 0
 		jz @@EndFunc
 		mov cx, dx
-		xor al, al		; al - blank symbol
+		
+		call FillWithSpaces
+
+@@EndFunc:	ret
+		endp
+
+;===============================================================================
+; FillWithSpaces
+;
+; Adds spaces after ES:DI CX times 
+; Entry:     ES -> video mem segment
+;	     CX -> number of spaces to fill
+;	     DI -> start position for filling
+; Exit:      -
+; Expected:  -
+; Destroyed: AX
+;-------------------------------------------------------------------------------
+
+FillWithSpaces	proc
+
+		mov ah, color_attr
+		xor al, al		; al - blank symbol 
 
 @@FillSpaces:
 		stosw
 		loop @@FillSpaces
 
-@@EndFunc:	ret
+		ret
 		endp
-
 
 end 		Start
