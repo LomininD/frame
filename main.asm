@@ -15,8 +15,8 @@ locals @@
 
 frame_sym  = 2ah			; symbol of a frame
 max_width  = 76				; max text width
-style_arg_len = 20			; bytes in frame style info
 style_arg_num = 7			; number of style args
+style_arg_len = style_arg_num * 3 - 1	; bytes in frame style info
 arg_len_pos = 80h			; location of arg len in cs
 arg_text_start = 82h			; location of arg text in cs
 					; first space skipped
