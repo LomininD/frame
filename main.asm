@@ -13,10 +13,10 @@ org 100h
 
 locals @@
 
-color_attr = 70h			; black text on white bg
 frame_sym  = 2ah			; symbol of a frame
 max_width  = 76				; max text width
-style_arg_len = 17			; bytes in frame style info
+style_arg_len = 20			; bytes in frame style info
+style_arg_num = 7			; number of style args
 arg_len_pos = 80h			; location of arg len in cs
 arg_text_start = 82h			; location of arg text in cs
 					; first space skipped
@@ -70,6 +70,7 @@ TotalSymbols	dw 0			; number of symbols in text
 TotalLines	dw 0			; number of lines in the text
 CurPos		dw 0			; cur pos in cs
 FrameStyle	db 6 dup (0)		; frame style arr
+Color_Attr	db 0			; color of frame
 
 ;===============================================================================
 ; ClearScreen
@@ -123,13 +124,14 @@ GetArgLen 	proc
 ;===============================================================================
 ; ParseFrameStyle
 ;
-; Gets frame style info (6 bytes)
-; 0: horizontal border
-; 1: vertical border
-; 2: top left corner
-; 3: top right corner
-; 4: bottom left corner
-; 5: bottom right corner
+; Gets frame style info (7 hex numbers)
+; 0: frame color attr
+; 1: horizontal border
+; 2: vertical border
+; 3: top left corner
+; 4: top right corner
+; 5: bottom left corner
+; 6: bottom right corner
 ; Entry:     CS -> code segment
 ;	     BX -> style arr address
 ; Exit:      -
@@ -139,7 +141,8 @@ GetArgLen 	proc
 
 ParseFrameStyle	proc
 
-		mov cx, style_arg_len
+		mov cx, style_arg_num - 1
+					; color arg is not processed on loop
 
 		push ds			; save ds
 		push es			; save es
@@ -151,16 +154,15 @@ ParseFrameStyle	proc
 
 		mov si, CurPos
 
+		lodsw
+		call AtoIW
+		mov Color_Attr, al
+		inc si
+		
 @@NextArg:				; load style arg in array
 		lodsw
 
-		call AtoI		; converts to hex number
-		mov dl, al
-		shl dl, 4
-		mov al, ah
-		call AtoI
-		add dl, al
-		mov al, dl
+		call AtoIW
 
 		mov byte ptr es:[bx], al
 		inc bx
@@ -183,7 +185,7 @@ ParseFrameStyle	proc
 		endp
 
 ;===============================================================================
-; AtoI
+; AtoIB
 ;
 ; Converts byte string A to hex number A 
 ; Entry:     AL -> number as string 
@@ -192,7 +194,7 @@ ParseFrameStyle	proc
 ; Destroyed: -
 ;-------------------------------------------------------------------------------
 
-AtoI		proc
+AtoIB		proc
 
 		cmp al, 'a'
 		jb @@ConvertDigital
@@ -207,6 +209,29 @@ AtoI		proc
 		add al, 0ah
 
 @@Ret:		ret
+		endp
+		
+;===============================================================================
+; AtoIW
+;
+; Converts word string A to hex number A 
+; Entry:     AX -> number as string 
+; Exit:      AL <- number as hex 
+; Expected:  -
+; Destroyed: DL
+;-------------------------------------------------------------------------------
+
+AtoIW		proc
+
+		call AtoIB		; converts AL to hex number
+		mov dl, al
+		shl dl, 4
+		mov al, ah
+		call AtoIB		; converts AH to hex number
+		add dl, al
+		mov al, dl
+
+		ret
 		endp
 
 ;===============================================================================
@@ -288,7 +313,7 @@ DrawFrame	proc
 		mov bx, 0		; bx = 0 for top border 
 		call DrawHBorder
 
-		mov ah, color_attr
+		mov ah, Color_Attr
 		mov cx, TotalLines
 		mov si, CurPos		; si = string beginning after space
 
@@ -343,7 +368,7 @@ DrawHBorder	proc
 		shl bx, 1		; modificates bx=0 -> bx=2  
 		add bx, 2		; 	      bx=1 -> bx=4
 
-		mov ah, color_attr
+		mov ah, Color_Attr
 
 		mov di, FrameOffset
 		mov al, [FrameStyle + bx]
@@ -418,7 +443,7 @@ DisplayStr	proc
 		mov dx, TextWidth
 		sub dx, cx
 
-		mov ah, color_attr
+		mov ah, Color_Attr
 
 @@MoveStr:
 		lodsb			; puts char in al
@@ -450,7 +475,7 @@ DisplayStr	proc
 
 FillWithSpaces	proc
 
-		mov ah, color_attr
+		mov ah, Color_Attr
 		xor al, al		; al - blank symbol
 
 @@FillSpaces:
