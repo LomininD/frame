@@ -52,13 +52,10 @@ Start:
 		mov TotalSymbols, bx 
 		mov TotalLines, cx
 
-
 		call CalcFrameOffset
 		mov FrameOffset, ax
 		
 		call DrawFrame
-
-
 
 EndProg:
 		mov ax, 0100h		; waits for any key to be pressed
@@ -73,6 +70,7 @@ TotalSymbols	dw 0			; number of symbols in text
 TotalLines	dw 0			; number of lines in the text
 CurPos		dw 0			; cur pos in cs
 FrameStyle	db 6 dup (0)		; frame style arr 
+
 ;===============================================================================
 ; ClearScreen
 ; 
@@ -130,8 +128,8 @@ GetArgLen 	proc
 ; 1: vertical border
 ; 2: top left corner
 ; 3: top right corner
-; 4: bottom right corner
-; 5: bottom left corner 
+; 4: bottom left corner
+; 5: bottom right corner 
 ; Entry:     CS -> code segment
 ;	     BX -> style arr address 
 ; Exit:      -
@@ -164,8 +162,8 @@ ParseFrameStyle	proc
 
 		mov bx, TotalSymbols
 		sub bx, style_arg_len
-		dec bx
-		mov TotalSymbols, bx	; TotalSymbols -= style_arg_len + 1
+		;dec bx
+		mov TotalSymbols, bx	; TotalSymbols -= style_arg_len
 
 		mov bx, CurPos
 		add bx, style_arg_len + 1
@@ -263,6 +261,7 @@ CalcFrameOffset	proc
 
 DrawFrame	proc
 
+		mov bx, 2
 		call DrawHBorder
 		;call DrawEmptyLine
 
@@ -271,7 +270,7 @@ DrawFrame	proc
 		mov si, CurPos		; si = string beginning after space
 
 @@Center:
-		mov al, frame_sym
+		mov al, [FrameStyle + 1]
 		stosw			; draws part of left vert border
 		mov al, 00h
 		stosw			; draws blank space
@@ -292,13 +291,14 @@ DrawFrame	proc
 
 		mov al, 00h
 		stosw			; draws blank space
-		mov al, frame_sym
+		mov al, [FrameStyle + 1]
 		stosw			; draws part of right vert border
 		NewL
 
 		loop @@Center
 
 		; call DrawEmptyLine
+		mov bx, 4
 		call DrawHBorder
 
 		ret
@@ -307,23 +307,31 @@ DrawFrame	proc
 ;===============================================================================
 ; DrawHBorder
 ;
-; Draws horizontal border in video mem
+; Draws horizontal top border in video mem
 ; Entry:     ES -> video mem segment
 ;	     CS -> code segment
+;	     BX -> 2 - top border, 4 - bottom border
 ; Exit:      -
 ; Expected:  -
-; Destroyed: AX, CX, DI
+; Destroyed: AX, BX, CX, DI
 ;-------------------------------------------------------------------------------
 
 DrawHBorder	proc
 		
-		mov cx, TextWidth 
-		add cx, 4
-		mov di, FrameOffset
-		mov al, frame_sym
 		mov ah, color_attr
 
-		rep stosw		; draws upper hor border
+		mov di, FrameOffset
+		mov al, [FrameStyle + bx]
+		stosw
+
+		mov cx, TextWidth 
+		add cx, 2
+		mov al, [FrameStyle]
+
+		rep stosw		; draws mid part of upper hor border
+
+		mov al, [FrameStyle + bx + 1]	
+		stosw
 
 		NewL
 
@@ -331,7 +339,7 @@ DrawHBorder	proc
 		endp
 
 ;===============================================================================
-; DrawEmptyLine
+; DrawEmptyLine (not used)
 ;
 ; Draws empty line in frame
 ; Entry:     ES -> video mem segment
@@ -361,7 +369,7 @@ DrawEmptyLine	proc
 ;===============================================================================
 ; DisplayStr
 ;
-; Displays command line argumnet in video mem 
+; Displays command line argument in video mem 
 ; Entry:     ES -> video mem segment
 ;	     CS -> code segment
 ;	     DI -> line offset for text 
