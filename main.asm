@@ -216,6 +216,7 @@ ParseFrameStyle	proc
 ; Sets style attrs in according to defined preset style
 ; 1 - simple frame
 ; 2 - double frame
+; 3 - ...
 ; Entry:     AL -> number of preset style 
 ; Exit:      -
 ; Expected:  -
@@ -228,6 +229,8 @@ SetPresetStyle	proc
 		je @@SimpleFrame
 		cmp al, 2
 		je @@DoubleFrame
+		cmp al, 3
+		je @@DontUseThisFrame
 
 @@SimpleFrame:	
 		mov [FrameStyle], 0c4h		; horizontal border
@@ -245,14 +248,15 @@ SetPresetStyle	proc
 		mov [FrameStyle + 3], 0bbh	; top right corner
 		mov [FrameStyle + 4], 0c8h	; bottom left corner
 		mov [FrameStyle + 5], 0bch	; bottom right corner
+		jmp @@Ret
 
 @@DontUseThisFrame:
-		mov [FrameStyle], 0cdh		; horizontal border
-		mov [FrameStyle + 1], 0bah	; vertical border
-		mov [FrameStyle + 2], 0c9h	; top left corner
-		mov [FrameStyle + 3], 0bbh	; top right corner
-		mov [FrameStyle + 4], 0c8h	; bottom left corner
-		mov [FrameStyle + 5], 0bch	; bottom right corner
+		mov [FrameStyle], 0bh		; horizontal border
+		mov [FrameStyle + 1], 0bh	; vertical border
+		mov [FrameStyle + 2], 6h	; top left corner
+		mov [FrameStyle + 3], 6h	; top right corner
+		mov [FrameStyle + 4], 6h	; bottom left corner
+		mov [FrameStyle + 5], 6h	; bottom right corner
 
 
 @@Ret:		ret
