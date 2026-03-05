@@ -15,8 +15,8 @@ locals @@
 
 frame_sym  = 2ah			; symbol of a frame
 max_width  = 76				; max text width
-style_arg_num = 7			; number of style args
-style_arg_len = style_arg_num * 3 - 1	; bytes in frame style info
+style_arg_num = 2			; number of style args
+style_arg_len = style_arg_num * 3 - 2   
 arg_len_pos = 80h			; location of arg len in cs
 arg_text_start = 82h			; location of arg text in cs
 					; first space skipped
@@ -32,13 +32,23 @@ NewL		macro
 		mov di, FrameOffset
 		endm
 
+CalcSArgLen	macro
+		mov ax, StyleArgLen
+		mov cx, 3
+		mul cx
+		sub ax, 2
+		mov StyleArgLen, ax
+		endm
+
 
 Start:
+		CalcSArgLen
+
 		LoadES
 		call ClearScreen
 
 		call GetArgLen
-		cmp ax, style_arg_len + 3	; 1 + 6 + 1 + 1 char of text
+		cmp ax, style_arg_len + 3	; 1 + args + 1 + 1 
 		jb EndProg
 		dec ax			; remove first space
 
@@ -64,6 +74,8 @@ EndProg:
 		mov ax, 4c00h		; quits the program
 		int 21h
 
+StyleArgNum dw 2			; number of style args
+StyleArgLen dw 0			; bytes in frame style info
 FrameOffset	dw 0			; frame beginning pos
 TextWidth	dw 0			; number of symbols in text
 TotalSymbols	dw 0			; number of symbols in text
@@ -124,14 +136,16 @@ GetArgLen 	proc
 ;===============================================================================
 ; ParseFrameStyle
 ;
-; Gets frame style info (7 hex numbers)
+; Gets frame style info (8 hex numbers)
 ; 0: frame color attr
-; 1: horizontal border
-; 2: vertical border
-; 3: top left corner
-; 4: top right corner
-; 5: bottom left corner
-; 6: bottom right corner
+; 1: Frame style (0 - custom, 1 - simple, 2 - double)
+; If custom frame style:
+; 2: horizontal border
+; 3: vertical border
+; 4: top left corner
+; 5: top right corner
+; 6: bottom left corner
+; 7: bottom right corner
 ; Entry:     CS -> code segment
 ;	     BX -> style arr address
 ; Exit:      -
@@ -140,9 +154,6 @@ GetArgLen 	proc
 ;-------------------------------------------------------------------------------
 
 ParseFrameStyle	proc
-
-		mov cx, style_arg_num - 1
-					; color arg is not processed on loop
 
 		push ds			; save ds
 		push es			; save es
@@ -154,10 +165,24 @@ ParseFrameStyle	proc
 
 		mov si, CurPos
 
-		lodsw
+		lodsw			; reads color attr
 		call AtoIW
 		mov Color_Attr, al
 		inc si
+
+		lodsb 			; read preset style
+		call AtoIB
+		inc si
+		cmp al, 0		; checks if style is preset or custom
+		jz @@CustomFrame
+
+		call SetPresetStyle
+		jmp @@Ret
+
+@@CustomFrame:
+		mov StyleArgNum, 8
+		CalcSArgLen
+		mov cx, style_arg_num - 2
 		
 @@NextArg:				; load style arg in array
 		lodsw
@@ -169,6 +194,7 @@ ParseFrameStyle	proc
 		inc si
 		loop @@NextArg
 
+@@Ret:
 		pop es			; restore es
 		pop ds			; restore cs
 
@@ -182,6 +208,54 @@ ParseFrameStyle	proc
 		mov CurPos, bx		; CurPos += style_arg_len + 1
 
 		ret
+		endp
+
+;===============================================================================
+; SetPresetStyle
+;
+; Sets style attrs in according to defined preset style
+; 1 - simple frame
+; 2 - double frame
+; Entry:     AL -> number of preset style 
+; Exit:      -
+; Expected:  -
+; Destroyed: -
+;-------------------------------------------------------------------------------
+
+SetPresetStyle	proc
+
+		cmp al, 1
+		je @@SimpleFrame
+		cmp al, 2
+		je @@DoubleFrame
+
+@@SimpleFrame:	
+		mov [FrameStyle], 0c4h		; horizontal border
+		mov [FrameStyle + 1], 0b3h	; vertical border
+		mov [FrameStyle + 2], 0dah	; top left corner
+		mov [FrameStyle + 3], 0bfh	; top right corner
+		mov [FrameStyle + 4], 0c0h	; bottom left corner
+		mov [FrameStyle + 5], 0d9h	; bottom right corner
+		jmp @@Ret
+
+@@DoubleFrame:
+		mov [FrameStyle], 0cdh		; horizontal border
+		mov [FrameStyle + 1], 0bah	; vertical border
+		mov [FrameStyle + 2], 0c9h	; top left corner
+		mov [FrameStyle + 3], 0bbh	; top right corner
+		mov [FrameStyle + 4], 0c8h	; bottom left corner
+		mov [FrameStyle + 5], 0bch	; bottom right corner
+
+@@DontUseThisFrame:
+		mov [FrameStyle], 0cdh		; horizontal border
+		mov [FrameStyle + 1], 0bah	; vertical border
+		mov [FrameStyle + 2], 0c9h	; top left corner
+		mov [FrameStyle + 3], 0bbh	; top right corner
+		mov [FrameStyle + 4], 0c8h	; bottom left corner
+		mov [FrameStyle + 5], 0bch	; bottom right corner
+
+
+@@Ret:		ret
 		endp
 
 ;===============================================================================
@@ -292,7 +366,7 @@ CalcFrameOffset	proc
 		mul dx			; whole value should be stored in ax
 		add ax, 40 * 2		; 80 - mid offset (40 words)
 		sub ax, bx
-		sub ax, 2 * 2		; -2 words for boarder and space
+		sub ax, 2 * 2		; -2 words for border and space
 
 		ret
 		endp
