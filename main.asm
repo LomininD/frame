@@ -15,8 +15,7 @@ locals @@
 
 frame_sym  = 2ah			; symbol of a frame
 max_width  = 76				; max text width
-style_arg_num = 2			; number of style args
-style_arg_len = style_arg_num * 3 - 2   
+
 arg_len_pos = 80h			; location of arg len in cs
 arg_text_start = 82h			; location of arg text in cs
 					; first space skipped
@@ -33,7 +32,7 @@ NewL		macro
 		endm
 
 CalcSArgLen	macro
-		mov ax, StyleArgLen
+		mov ax, StyleArgNum
 		mov cx, 3
 		mul cx
 		sub ax, 2
@@ -48,7 +47,9 @@ Start:
 		call ClearScreen
 
 		call GetArgLen
-		cmp ax, style_arg_len + 3	; 1 + args + 1 + 1 
+		mov bx, StyleArgLen
+		add bx, 3
+		cmp ax, bx		; 1 + args + 1 + 1 
 		jb EndProg
 		dec ax			; remove first space
 
@@ -74,8 +75,8 @@ EndProg:
 		mov ax, 4c00h		; quits the program
 		int 21h
 
-StyleArgNum dw 2			; number of style args
-StyleArgLen dw 0			; bytes in frame style info
+StyleArgNum 	dw 2			; number of style args
+StyleArgLen 	dw 0			; bytes in frame style info
 FrameOffset	dw 0			; frame beginning pos
 TextWidth	dw 0			; number of symbols in text
 TotalSymbols	dw 0			; number of symbols in text
@@ -182,7 +183,8 @@ ParseFrameStyle	proc
 @@CustomFrame:
 		mov StyleArgNum, 8
 		CalcSArgLen
-		mov cx, style_arg_num - 2
+		mov cx, StyleArgNum
+		sub cx, 2
 		
 @@NextArg:				; load style arg in array
 		lodsw
@@ -199,12 +201,13 @@ ParseFrameStyle	proc
 		pop ds			; restore cs
 
 		mov bx, TotalSymbols
-		sub bx, style_arg_len
+		sub bx, StyleArgLen
 		dec bx
 		mov TotalSymbols, bx	; TotalSymbols -= style_arg_len + 1
 
 		mov bx, CurPos
-		add bx, style_arg_len + 1
+		add bx, StyleArgLen
+		inc bx
 		mov CurPos, bx		; CurPos += style_arg_len + 1
 
 		ret
